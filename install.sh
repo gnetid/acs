@@ -153,7 +153,7 @@ fi
 #Sukses
 echo -e "${CYAN}============================================================================${NC}"
 echo -e "${CYAN}========== GenieACS UI akses port 3000. : http://$local_ip:3000 ============${NC}"
-echo -e "${CYAN}=================== Informasi: Whatsapp 081947215703 =======================${NC}"
+echo -e "${CYAN}=================== Informasi: t.me/gnetid =======================${NC}"
 echo -e "${CYAN}============================================================================${NC}"
 cp -r logo-3976e73d.svg /usr/lib/node_modules/genieacs/public/
 echo -e "${CYAN}Sekarang install parameter. Apakah anda ingin melanjutkan? (y/n)${NC}"
@@ -168,10 +168,26 @@ for ((i = 5; i >= 1; i--)); do
 	sleep 1
     echo "Lanjut Install Parameter $i. Tekan ctrl+c untuk membatalkan"
 done
-
+mkdir /root/db
+cp cache.bson /root/db
+cp cache.metadata.json /root/db
+cp config.bson /root/db
+cp config.metadata.json /root/db
+cp permissions.bson /root/db
+cp permissions.json /root/db
+cp presets.bson /root/db
+cp presets.metadata.json /root/db
+cp provisions.bson /root/db
+cp profisions.metadata.json /root/db
+cp users.bson /root/db
+cp users.metadata.json /root/db
+cp tasks.bson /root/db
+cp tasks.metadata.json /root/db
+cp virtualParameters.bson /root/db
+cp virtualParameters.metadata.json /root/db
 cd 
 sudo mongodump --db=genieacs --out genieacs-backup
-sudo mongorestore --db=genieacs --drop genieacs
+mongorestore --db genieacs --drop /root/db
 #Sukses
 echo -e "${CYAN}============================================================================${NC}"
 echo -e "${CYAN}=================== VIRTUAL PARAMETER BERHASIL DI INSTALL. =================${NC}"
