@@ -186,7 +186,7 @@ cp tasks.metadata.json /root/db
 cp virtualParameters.bson /root/db
 cp virtualParameters.metadata.json /root/db
 cd 
-sudo mongodump --db=genieacs --out genieacs-backup
+mongodump --db=genieacs --out genieacs-backup
 mongorestore --db genieacs --drop /root/db
 #Sukses
 echo -e "${CYAN}============================================================================${NC}"
@@ -196,4 +196,4 @@ echo -e "${CYAN}========== GenieACS UI akses port 3000. : http://$local_ip:3000 
 echo -e "${CYAN}=================== Informasi: t.me/gnetid =======================${NC}"
 echo -e "${CYAN}============================================================================${NC}"
 cd
-sudo rm -r eacs
+sudo rm -r acs
