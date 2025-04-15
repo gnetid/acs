@@ -196,4 +196,4 @@ echo -e "${CYAN}========== GenieACS UI akses port 3000. : http://$local_ip:3000 
 echo -e "${CYAN}=================== Informasi: t.me/gnetid =======================${NC}"
 echo -e "${CYAN}============================================================================${NC}"
 cd
-sudo rm -r genieacs
+sudo rm -r eacs
