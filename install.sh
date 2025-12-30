@@ -32,20 +32,120 @@ done
 
 echo -e "${YELLOW}Memulai instalasi GenieACS...${RESET}"
 echo "Menginstal Node.js..."
-curl -sL https://deb.nodesource.com/setup_18.x -o nodesource_setup.sh
-bash nodesource_setup.sh
-apt install -y nodejs
-node -v
+
+# Check if Node.js already installed
+if command -v node &> /dev/null && command -v npm &> /dev/null; then
+    NODE_VERSION=$(node -v | cut -d'v' -f2 | cut -d'.' -f1)
+    if [ "$NODE_VERSION" -ge 16 ]; then
+        echo "Node.js sudah terinstall (versi bagus):"
+        node -v
+        npm -v
+    else
+        echo "Node.js versi lama terdeteksi, upgrade ke versi 18..."
+        # Remove old Node.js packages that conflict
+        apt-get remove -y nodejs libnode72 libnode-dev || true
+        apt-get autoremove -y
+        
+        # Install Node.js 18
+        apt-get update
+        apt-get install -y ca-certificates curl gnupg
+        mkdir -p /etc/apt/keyrings
+        curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+        NODE_MAJOR=18
+        echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list
+        apt-get update
+        apt-get install -y nodejs
+        
+        if command -v node &> /dev/null && command -v npm &> /dev/null; then
+            echo "Node.js berhasil di-upgrade:"
+            node -v
+            npm -v
+        else
+            echo -e "${RED}ERROR: Node.js gagal diinstall! Script dihentikan.${NC}"
+            exit 1
+        fi
+    fi
+else
+    echo "Installing Node.js from NodeSource..."
+    # Remove any conflicting packages first
+    apt-get remove -y nodejs libnode72 libnode-dev 2>/dev/null || true
+    apt-get autoremove -y
+    
+    # Install Node.js from NodeSource (new method)
+    apt-get update
+    apt-get install -y ca-certificates curl gnupg
+    mkdir -p /etc/apt/keyrings
+    curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg
+    NODE_MAJOR=18
+    echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_$NODE_MAJOR.x nodistro main" | tee /etc/apt/sources.list.d/nodesource.list
+    apt-get update
+    apt-get install -y nodejs
+    
+    # Verify installation
+    if command -v node &> /dev/null && command -v npm &> /dev/null; then
+        echo "Node.js berhasil diinstall:"
+        node -v
+        npm -v
+    else
+        echo -e "${RED}ERROR: Node.js gagal diinstall! Script dihentikan.${NC}"
+        exit 1
+    fi
+fi
 
 echo "Menginstal MongoDB..."
-curl -fsSL https://www.mongodb.org/static/pgp/server-4.4.asc | apt-key add -
-echo "deb [ arch=amd64,arm64 ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/4.4 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-4.4.list
-apt update
-apt install -y mongodb-org
-systemctl start mongod.service
+# Auto-detect Ubuntu version
+UBUNTU_CODENAME=$(lsb_release -cs)
+echo "Detected Ubuntu version: $UBUNTU_CODENAME"
+
+# Install gnupg if not present
+apt-get install -y gnupg curl
+
+# Add MongoDB GPG key (new method for Ubuntu 22+)
+curl -fsSL https://www.mongodb.org/static/pgp/server-7.0.asc | \
+  gpg -o /usr/share/keyrings/mongodb-server-7.0.gpg --dearmor
+
+# Add MongoDB repository based on Ubuntu version
+case "$UBUNTU_CODENAME" in
+  jammy|kinetic|lunar|mantic|noble)
+    # Ubuntu 22.04, 22.10, 23.04, 23.10, 24.04
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
+      tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+    ;;
+  focal)
+    # Ubuntu 20.04
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu focal/mongodb-org/7.0 multiverse" | \
+      tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+    ;;
+  bionic)
+    # Ubuntu 18.04
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu bionic/mongodb-org/7.0 multiverse" | \
+      tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+    ;;
+  *)
+    # Fallback to jammy for newer versions
+    echo "Ubuntu version not explicitly supported, using jammy repository"
+    echo "deb [ arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-7.0.gpg ] https://repo.mongodb.org/apt/ubuntu jammy/mongodb-org/7.0 multiverse" | \
+      tee /etc/apt/sources.list.d/mongodb-org-7.0.list
+    ;;
+esac
+
+apt-get update
+apt-get install -y mongodb-org
+
+# Start and enable MongoDB
+systemctl start mongod
 systemctl enable mongod
 
-mongo --eval 'db.runCommand({ connectionStatus: 1 })'
+# Wait for MongoDB to be ready
+echo "Waiting for MongoDB to start..."
+sleep 5
+
+# Test MongoDB connection (mongosh for MongoDB 5.0+)
+if command -v mongosh &> /dev/null; then
+    mongosh --eval 'db.runCommand({ connectionStatus: 1 })'
+else
+    mongo --eval 'db.runCommand({ connectionStatus: 1 })'
+fi
 
 #GenieACS
 if !  systemctl is-active --quiet genieacs-{cwmp,fs,ui,nbi}; then
@@ -155,45 +255,37 @@ echo -e "${CYAN}================================================================
 echo -e "${CYAN}========== GenieACS UI akses port 3000. : http://$local_ip:3000 ============${NC}"
 echo -e "${CYAN}=================== Informasi: t.me/gnetid =======================${NC}"
 echo -e "${CYAN}============================================================================${NC}"
-cp -r logo-3976e73d.svg /usr/lib/node_modules/genieacs/public/
+# Copy logo only if genieacs is installed
+if [ -d "/usr/lib/node_modules/genieacs/public/" ]; then
+    cp -r logo-3976e73d.svg /usr/lib/node_modules/genieacs/public/
+    echo -e "${CYAN}Logo berhasil di-copy${NC}"
+else
+    echo -e "${RED}Warning: GenieACS tidak terinstall dengan benar, skip copy logo${NC}"
+fi
 echo -e "${CYAN}Sekarang install parameter. Apakah anda ingin melanjutkan? (y/n)${NC}"
 read confirmation
 
 if [ "$confirmation" != "y" ]; then
     echo -e "${CYAN}Install dibatalkan..${NC}"
-    
     exit 1
 fi
+
 for ((i = 5; i >= 1; i--)); do
-	sleep 1
+    sleep 1
     echo "Lanjut Install Parameter $i. Tekan ctrl+c untuk membatalkan"
 done
-mkdir /root/db
-cp cache.bson /root/db
-cp cache.metadata.json /root/db
-cp config.bson /root/db
-cp config.metadata.json /root/db
-cp permissions.bson /root/db
-cp permissions.json /root/db
-cp presets.bson /root/db
-cp presets.metadata.json /root/db
-cp provisions.bson /root/db
-cp profisions.metadata.json /root/db
-cp users.bson /root/db
-cp users.metadata.json /root/db
-cp tasks.bson /root/db
-cp tasks.metadata.json /root/db
-cp virtualParameters.bson /root/db
-cp virtualParameters.metadata.json /root/db
-cd 
-mongodump --db=genieacs --out genieacs-backup
-mongorestore --db genieacs --drop /root/db
-#Sukses
-echo -e "${CYAN}============================================================================${NC}"
-echo -e "${CYAN}=================== VIRTUAL PARAMETER BERHASIL DI INSTALL. =================${NC}"
-echo -e "${CYAN}===Jika ACS URL berbeda, silahkan edit di Admin >> Provosions >> inform ====${NC}"
-echo -e "${CYAN}========== GenieACS UI akses port 3000. : http://$local_ip:3000 ============${NC}"
-echo -e "${CYAN}=================== Informasi: t.me/gnetid =======================${NC}"
-echo -e "${CYAN}============================================================================${NC}"
-cd
-sudo rm -r acs
+
+# Restore database dari folder db yang ada di direktori acs
+if [ -d "db" ]; then
+    mongorestore --db genieacs --drop db
+    systemctl restart genieacs-{cwmp,fs,ui,nbi}
+    echo -e "${CYAN}============================================================================${NC}"
+    echo -e "${CYAN}=================== VIRTUAL PARAMETER BERHASIL DI INSTALL. =================${NC}"
+    echo -e "${CYAN}===Jika ACS URL berbeda, silahkan edit di Admin >> Provosions >> inform ====${NC}"
+    echo -e "${CYAN}========== GenieACS UI akses port 3000. : http://$local_ip:3000 ============${NC}"
+    echo -e "${CYAN}=================== Informasi: t.me/gnetid =======================${NC}"
+    echo -e "${CYAN}============================================================================${NC}"
+else
+    echo -e "${RED}Folder db tidak ditemukan, skip restore database${NC}"
+    echo -e "${CYAN}========== GenieACS UI akses port 3000. : http://$local_ip:3000 ============${NC}"
+fi
